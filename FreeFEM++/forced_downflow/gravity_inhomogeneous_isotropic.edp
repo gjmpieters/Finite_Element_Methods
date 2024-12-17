@@ -1,0 +1,157 @@
+real R = 20; 
+real direction = 1;
+real invR = 1/R;
+real Z = 65;
+real beta = 0.01;
+
+macro F(s,v) (-dx(s)*dx(v) - dy(s)*dy(v)) //
+
+int factor = 5; // 7
+int xsize = 20; // 10
+int ysize = 100;
+int m=1*factor;// number of points
+mesh th=square(xsize*m,ysize*m, [-xsize/2 + xsize*x, ysize*y]);
+mesh sh=square(xsize*m,ysize*m, [-xsize/2 + xsize*x, ysize*y]);
+real h=1.0/m;// size of h
+
+//plot(th, value =1, wait = 1, fill = 1) ;
+
+func kappa = ( y > Z || y < 15 ? beta : 2.0); //func kappa = ( y > Z ? 1.0 : beta);
+//func kappa = ( y > Z ? 1.0 : beta);
+
+func psibc1 = direction*(x+xsize/2)*invR;
+func psibc2 = direction*xsize*invR;
+//func init = 0.0000001*cos(2*pi*(x+xsize)/xsize);
+//func init = 0.0000001*randreal2();
+func init = ( x > -1.66 && x < 1.66 ? 0.0005 : 0);
+
+real dt = 0.005;// size of dt
+real theta = 1.0;
+
+//
+// Definition of the fespace
+//
+fespace Wh(sh,P2);
+Wh psi, w;
+
+fespace Vh(th,P2, periodic=[[4,y],[2,y]]);
+Vh s,v;
+Vh fh1,fh0;
+Vh start = init;
+Vh u0 = init; // initial data
+
+problem streamfunction(psi,w) =   int2d(sh)( (1/kappa) * dx(psi) * dx(w) + (1/kappa) * dy(psi) * dy(w) )  
+                                - int2d(sh)( -dx(u0) * w)
+                                + on(1, psi=psibc1)
+                                + on(2, psi=psibc2)  
+                                + on(3, psi=psibc1)
+                                + on(4, psi=0);
+
+problem saturation(s,v) =   int2d(th)(s*v-theta*dt*F(s,v))
+                          - int2d(th)(v*convect([R*dy(psi),-R*dx(psi)], -dt, u0)+(1-theta)*dt*F(u0,v))
+                          + on(1,s=0)
+                          + on(3,s=1);
+
+ofstream f("norms.csv"); 
+ofstream g("break_through.csv"); 
+
+real[int]colorhsv=[  // color hsv model
+0.6667,1,0.5625,
+0.6667,1,0.625,
+0.6667,1,0.6875,
+0.6667,1,0.75,
+0.6667,1,0.8125,
+0.6667,1,0.875,
+0.6667,1,0.9375,
+0.6667,1,1,
+0.6563,1,1,
+0.6458,1,1,
+0.6354,1,1,
+0.625,1,1,
+0.6146,1,1,
+0.6042,1,1,
+0.5938,1,1,
+0.5833,1,1,
+0.5729,1,1,
+0.5625,1,1,
+0.5521,1,1,
+0.5417,1,1,
+0.5313,1,1,
+0.5208,1,1,
+0.5104,1,1,
+0.5,1,1,
+0.4889,0.9375,1,
+0.4762,0.875,1,
+0.4615,0.8125,1,
+0.4444,0.75,1,
+0.4242,0.6875,1,
+0.4,0.625,1,
+0.3704,0.5625,1,
+0.3333,0.5,1,
+0.2963,0.5625,1,
+0.2667,0.625,1,
+0.2424,0.6875,1,
+0.2222,0.75,1,
+0.2051,0.8125,1,
+0.1905,0.875,1,
+0.1778,0.9375,1,
+0.1667,1,1,
+0.1563,1,1,
+0.1458,1,1,
+0.1354,1,1,
+0.125,1,1,
+0.1146,1,1,
+0.1042,1,1,
+0.0938,1,1,
+0.0833,1,1,
+0.0729,1,1,
+0.0625,1,1,
+0.0521,1,1,
+0.0417,1,1,
+0.0313,1,1,
+0.0208,1,1,
+0.0104,1,1,
+0,1,1,
+0,1,0.9375,
+0,1,0.875,
+0,1,0.8125,
+0,1,0.75,
+0,1,0.6875,
+0,1,0.625,
+0,1,0.5625,
+0,1,0.5
+ ];
+ 
+int i;
+real t=0;// initial time
+real tf=10000*dt;// final time
+for(int n = 0 ; n < tf/dt ; n++) 
+{
+
+  streamfunction; 
+  saturation;
+  u0 = s;
+  t=t+dt;
+
+  Vh gs = 0.5 * erfc(((ysize-y)-t)/(2*sqrt(t))) + 0.5*exp((ysize-y))*erfc(((ysize-y)+t)/(2*sqrt(t))); 
+
+  if ( ( n % 100 ) == 0 )
+  {
+    plot (psi, ps="streamfunction_" + n + ".eps", value = 1, fill = 1, hsv=colorhsv);
+	plot (s, ps="saturation_" + n + ".eps", value = 1, fill = 1, hsv=colorhsv);	
+  }
+ 
+  Vh pert = s - gs;
+  real L2 = int2d(th)(pert * pert);
+  f << t << "," << sqrt(L2) << endl;
+  
+  real sums, sumgs;
+  for(i=0 ; i <= xsize*m; i++)
+  {
+    x = -xsize/2 + i*h;
+    y = Z;
+    sums = sums + s*s*h;
+    sumgs = sumgs + gs*gs*h;
+  }
+  g << t << "," << sqrt(sums/xsize) << "," << sqrt(sumgs/xsize) << endl; 
+}

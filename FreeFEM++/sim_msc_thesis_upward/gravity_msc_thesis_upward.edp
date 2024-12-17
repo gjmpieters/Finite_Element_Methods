@@ -1,0 +1,108 @@
+real R = 35; 
+real direction = -1;
+real invR = 1/R;
+
+macro F(s,v) (-dx(s)*dx(v) - dy(s)*dy(v)) //
+
+int factor = 7;
+real xsize = 50;
+real ysize = 5;
+int m=1*factor;// number of points
+mesh th=square(xsize*m,ysize*m, [-xsize/2 + xsize*x, ysize*y]);
+mesh sh=square(xsize*m,ysize*m, [-xsize/2 + xsize*x, ysize*y]);
+real h=1.0/m;// size of h
+
+//plot(th, value =1, wait = 1, fill = 1) ;
+
+func psibc1 = direction*(x+xsize/2)*invR;
+func psibc2 = direction*xsize*invR;
+func init = ( x > -8.33 && x < 8.33 ? 0.0005 : 0);
+
+
+real dt = 0.005;// size of dt
+real theta = 1.0;
+//
+// Definition of the fespace
+//
+fespace Wh(sh,P2);
+Wh psi, w;
+
+Wh n11=0,n22=0,n12=0;         // to store the metric field
+
+fespace Vh(th,P2, periodic=[[4,y],[2,y]]);
+Vh s,v;
+Vh fh1,fh0;
+Vh start = init;
+Vh u0 = init; // initial data
+
+plot (u0, ps="saturation_A.eps", value = 1, fill = 1);
+
+Vh m11=0,m22=0,m12=0;         // to store the metric field
+
+problem streamfunction(psi,w) =   int2d(sh)( dx(psi) * dx(w) + dy(psi) * dy(w) )  
+                                - int2d(sh)( -dx(u0) * w)
+                                + on(1, psi=psibc1)
+                                + on(2, psi=psibc2)  
+                                + on(3, psi=psibc1)
+                                + on(4, psi=0);
+
+problem saturation(s,v) =   int2d(th)(s*v-theta*dt*F(s,v))
+                          - int2d(th)(v*convect([R*dy(psi),-R*dx(psi)], -dt, u0)+(1-theta)*dt*F(u0,v))
+                          + on(1,s=0)
+                          + on(3,s=1);
+
+ofstream f("norms.csv"); 
+ofstream g("break_through.csv"); 
+
+int i;
+real t=0;// initial time
+real tf=4500*dt;// final time
+//real tf=100*dt;// final time
+for(int n = 0 ; n < tf/dt ; n++) 
+{
+  streamfunction; 
+  saturation;
+  u0 = s;
+  t=t+dt;
+
+  //adaptmesh(th,u0,err=0.0001,metric=[m11[],m12[],m22[]],nomeshgeneration= true);
+  //adaptmesh(sh,psi,err=0.0001,metric=[n11[],n12[],n22[]],nomeshgeneration= true);
+  
+  //sh = adaptmesh ( sh, psi);
+  //th = adaptmesh ( th, u0);
+	
+  //Vh gs = 0.5 * erfc(((ysize-y)-t)/(2*sqrt(t))) + 0.5*exp((ysize-y))*erfc(((ysize-y)+t)/(2*sqrt(t))); 
+  //Vh gs = (exp(ysize-y) - 1) / (exp(ysize) - 1);
+  real fac = exp(ysize) - 1.0;
+  Vh gs = (exp(y) - 1) / fac;
+    
+  if ( ( n % 50 ) == 0 )
+  {
+    //sh = adaptmesh ( sh, psi, metric=[n11[],n12[],n22[]]);
+    //n11=0;n22=0;n12=0; // reset metric   
+	
+	//th = adaptmesh ( th, u0, metric=[m11[],m12[],m22[]]);
+    //m11=0;m22=0;m12=0; // reset metric   
+	
+
+    //plot (th, ps="mesh_saturation_" + n + ".eps", value = 1, fill = 1);
+    //plot (sh, ps="mesh_streamfunction_" + n + ".eps", value = 1, fill = 1);
+		
+    plot (psi, ps="streamfunction_" + n + ".eps", value = 1, fill = 1);
+	plot (s, ps="saturation_" + n + ".eps", value = 1, fill = 1);
+  }
+ 
+  Vh pert = s - gs;
+  real L2 = int2d(th)(pert * pert);
+  f << t << "," << L2 << endl;
+  
+  real sums, sumgs;
+  for(i=0 ; i <= xsize*m; i++)
+  {
+    x = -xsize/2 + i*h;
+    y = 80;
+    sums = sums + s*s;
+    sumgs = sumgs + gs*gs;
+  }
+  g << t << "," << sums << "," << sumgs << endl; 
+}

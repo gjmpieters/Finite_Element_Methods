@@ -1,0 +1,131 @@
+// Parameters
+verbosity=0;
+real sigma = 0; //value of the shift
+int nev = 20; //number of computed eigen value close to sigma
+
+// Mesh
+mesh Th = square(200, 100, [20*x-10, -10*y]);
+
+//plot(Th, value =1, wait = 1, fill = 1) ;
+
+// Fespace
+fespace Vh(Th, P2);
+Vh c, cc;
+
+fespace Wh(Th, P2);
+Wh w, ww;
+
+// Problem
+varf C (c, cc)
+    = int2d(Th)(
+        dx(c)*dx(cc) - 0.5 * x * dx(c) * cc
+        + dy(c)*dy(cc) - 0.5 * y * dy(c) * cc
+        - sigma* c*cc
+    )
+    + on(1,2,3,4, c=0)	
+    ;
+
+varf W (c, w, cc, ww)
+    = int2d(Th)(
+          dx(w)*dx(ww) 
+        + dy(w)*dy(ww)		
+    )
+    + on(1, 2, 4, w=0)
+    ;
+	
+varf b ([c], [cc]) = int2d(Th)(c*cc); //no boundary condition
+
+matrix MatC = C(Vh, Vh, solver=LU, factorize=1); //crout solver because the matrix in not positive
+matrix MatW = W(Wh, Wh, solver=Crout, factorize=1); //crout solver because the matrix in not positive
+
+matrix MatB = b(Vh, Vh, solver=LU, eps=1e-20);
+
+// important remark:
+// the boundary condition is make with exact penalization:
+// we put 1e30=tgv on the diagonal term of the lock degree of freedom.
+// So take Dirichlet boundary condition just on $a$ variational form
+// and not on $b$ variational form.
+// because we solve $ w=OP^-1*B*v $
+
+// Solve
+real[int] ev(nev); //to store the nev eigenvalue
+Vh[int] eV(nev); //to store the nev eigenvector
+
+int k = EigenValue(MatC, MatB, sym=false, sigma=sigma, value=ev, vector=eV,
+    tol=1e-20, maxit=0, ncv=0);
+
+real[int]colorhsv=[  // color hsv model
+0.6667,1,0.5625,
+0.6667,1,0.625,
+0.6667,1,0.6875,
+0.6667,1,0.75,
+0.6667,1,0.8125,
+0.6667,1,0.875,
+0.6667,1,0.9375,
+0.6667,1,1,
+0.6563,1,1,
+0.6458,1,1,
+0.6354,1,1,
+0.625,1,1,
+0.6146,1,1,
+0.6042,1,1,
+0.5938,1,1,
+0.5833,1,1,
+0.5729,1,1,
+0.5625,1,1,
+0.5521,1,1,
+0.5417,1,1,
+0.5313,1,1,
+0.5208,1,1,
+0.5104,1,1,
+0.5,1,1,
+0.4889,0.9375,1,
+0.4762,0.875,1,
+0.4615,0.8125,1,
+0.4444,0.75,1,
+0.4242,0.6875,1,
+0.4,0.625,1,
+0.3704,0.5625,1,
+0.3333,0.5,1,
+0.2963,0.5625,1,
+0.2667,0.625,1,
+0.2424,0.6875,1,
+0.2222,0.75,1,
+0.2051,0.8125,1,
+0.1905,0.875,1,
+0.1778,0.9375,1,
+0.1667,1,1,
+0.1563,1,1,
+0.1458,1,1,
+0.1354,1,1,
+0.125,1,1,
+0.1146,1,1,
+0.1042,1,1,
+0.0938,1,1,
+0.0833,1,1,
+0.0729,1,1,
+0.0625,1,1,
+0.0521,1,1,
+0.0417,1,1,
+0.0313,1,1,
+0.0208,1,1,
+0.0104,1,1,
+0,1,1,
+0,1,0.9375,
+0,1,0.875,
+0,1,0.8125,
+0,1,0.75,
+0,1,0.6875,
+0,1,0.625,
+0,1,0.5625,
+0,1,0.5
+ ];
+ 
+// Display & Plot
+for (int i = 0; i < k; i++){
+    c = eV[i];
+    //real gg = int2d(Th)(-dx(c)*dx(c) - dy(c)*dy(c));
+    //real mm = int2d(Th)(c*c) ;
+    cout << "lambda[" << i << "] = " << ev[i] << ", err= " << int2d(Th)(dx(c)*dx(c) - 0.5 * x * dx(c) * c + dy(c)*dy(c) - 0.5 * y * dy(c) * c - (ev[i])*c*c) << endl;
+    plot(eV[i], cmm="Eigen Vector "+i+" value ="+ev[i], wait=true, value=true, fill=1, hsv=colorhsv);
+}
